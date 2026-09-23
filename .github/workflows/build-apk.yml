@@ -28,6 +28,14 @@ jobs:
         with:
           packages: "platform-tools platforms;android-34 build-tools;34.0.0"
 
+      - name: Verify www folder exists
+        run: |
+          if [ ! -d "www" ]; then
+            echo "ERROR: www/ folder not found. Move index.html, css/, js/ into www/"
+            exit 1
+          fi
+          ls -la www/
+
       - name: Install Dependencies
         run: |
           npm install
