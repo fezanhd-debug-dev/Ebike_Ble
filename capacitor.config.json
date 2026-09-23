@@ -1,7 +1,7 @@
 {
   "appId": "com.ebike.companion",
   "appName": "EBike Smart Pro",
-  "webDir": ".",
+  "webDir": "www",
   "bundledWebRuntime": false,
   "android": {
     "allowMixedContent": true
