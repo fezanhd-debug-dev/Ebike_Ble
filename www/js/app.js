@@ -1,10 +1,10 @@
+
 /**
- * Application Controller
- * Handles UI interactions, Tab Navigation, BMS Sync, and Live Simulation
+ * Application Controller - Strictly Real Telemetry
  */
 
 document.addEventListener("DOMContentLoaded", () => {
-
+  // Tabs Navigation
   const navItems = document.querySelectorAll(".nav-item");
   const tabPanes = document.querySelectorAll(".tab-pane");
 
@@ -18,23 +18,24 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  // Cell Elements placeholder (starts empty / dashes until real BLE stream arrives)
   const cellsGrid = document.getElementById("cellsGrid");
-  const cellVoltages = [
-    4.032, 4.028, 4.030, 4.025, 4.034, 4.029, 4.041,
-    4.030, 4.027, 4.031, 4.026, 4.023, 4.032, 4.028
-  ];
-  cellVoltages.forEach((volt, idx) => {
+  cellsGrid.innerHTML = "";
+  for (let i = 1; i <= 14; i++) {
     const box = document.createElement("div");
     box.className = "cell-box";
+    box.id = `cell-s${i}`;
     box.innerHTML = `
-      <div class="cell-name">S${String(idx + 1).padStart(2, '0')}</div>
-      <div class="cell-volt">${volt.toFixed(3)}V</div>
+      <div class="cell-name">S${String(i).padStart(2, '0')}</div>
+      <div class="cell-volt" id="val-s${i}">-- V</div>
     `;
     cellsGrid.appendChild(box);
-  });
+  }
 
+  // Terminal & BLE Logs
   const terminalLogs = document.getElementById("terminalLogs");
   function appendLog(msg, type = "info") {
+    if (!terminalLogs) return;
     const row = document.createElement("div");
     row.className = `log-row ${type}`;
     const time = new Date().toTimeString().split(' ')[0];
@@ -44,6 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   window.bleManager.onLog = appendLog;
 
+  // BLE Connection Button & Status
   const btnConnect = document.getElementById("btnConnect");
   const blePulse = document.getElementById("blePulse");
   const deviceName = document.getElementById("deviceName");
@@ -51,12 +53,17 @@ document.addEventListener("DOMContentLoaded", () => {
   window.bleManager.onConnectionChanged = (connected) => {
     if (connected) {
       blePulse.className = "pulse-indicator connected";
-      deviceName.textContent = "M1365262501142 (Connected)";
+      deviceName.textContent = "M1365262501142 (Connected Live)";
       btnConnect.textContent = "DISCONNECT";
     } else {
       blePulse.className = "pulse-indicator disconnected";
       deviceName.textContent = "M1365262501142 (Disconnected)";
       btnConnect.textContent = "CONNECT BLE";
+
+      // Reset values to awaiting data
+      document.getElementById("speedDisplay").textContent = "0";
+      document.getElementById("batteryPct").textContent = "--%";
+      document.getElementById("packVoltage").textContent = "--V";
     }
   };
 
@@ -65,17 +72,43 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         await window.bleManager.connect();
       } catch (e) {
-        appendLog("Interactive Simulation active...", "warn");
-        simulateBikeData();
+        appendLog("BLE Connect Error: " + e.message, "warn");
       }
     } else {
-      window.bleManager.device?.gatt.disconnect();
+      window.bleManager.device?.gatt?.disconnect();
     }
   });
 
+  // REAL LIVE DATA HOOK (0xFFF1)
+  window.bleManager.onTelemetryData = (data) => {
+    if (data.speed !== undefined) {
+      document.getElementById("speedDisplay").textContent = Math.round(data.speed);
+    }
+    if (data.voltage) {
+      document.getElementById("packVoltage").textContent = data.voltage + "V";
+    }
+    if (data.current) {
+      document.getElementById("currentDraw").textContent = data.current + " A";
+    }
+    if (data.soc !== undefined && data.soc > 0) {
+      document.getElementById("batteryPct").textContent = data.soc + "%";
+    }
+  };
+
+  // REAL LIVE 14S CELL BALANCER DATA HOOK
+  window.bleManager.onCellData = (voltages) => {
+    voltages.forEach((volt, idx) => {
+      const cellEl = document.getElementById(`val-s${idx + 1}`);
+      if (cellEl) {
+        cellEl.textContent = `${volt}V`;
+      }
+    });
+  };
+
+  // Switch Controls
   const toggleHeadlight = document.getElementById("toggleHeadlight");
   const txtLightState = document.getElementById("txtLightState");
-  toggleHeadlight.addEventListener("change", (e) => {
+  toggleHeadlight?.addEventListener("change", (e) => {
     const on = e.target.checked;
     txtLightState.textContent = on ? "ON" : "OFF";
     window.bleManager.setHeadlight(on);
@@ -83,61 +116,44 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const toggleBikePower = document.getElementById("toggleBikePower");
   const txtPowerState = document.getElementById("txtPowerState");
-  toggleBikePower.addEventListener("change", (e) => {
+  toggleBikePower?.addEventListener("change", (e) => {
     const on = e.target.checked;
     txtPowerState.textContent = on ? "ARMED / ON" : "OFF";
     window.bleManager.setIgnition(on);
   });
 
+  // Drive Mode
   const modeButtons = document.querySelectorAll(".btn-mode");
   modeButtons.forEach(btn => {
     btn.addEventListener("click", () => {
       modeButtons.forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
-      const mode = btn.getAttribute("data-mode");
-      window.bleManager.setDriveMode(mode);
+      window.bleManager.setDriveMode(btn.getAttribute("data-mode"));
     });
   });
 
+  // BMS Sliders
   const sliderOvp = document.getElementById("sliderOvp");
   const ovpVal = document.getElementById("ovpVal");
-  sliderOvp.addEventListener("input", (e) => {
-    ovpVal.textContent = `${parseFloat(e.target.value).toFixed(2)} V`;
-  });
+  sliderOvp?.addEventListener("input", (e) => { ovpVal.textContent = `${parseFloat(e.target.value).toFixed(2)} V`; });
 
   const sliderUvp = document.getElementById("sliderUvp");
   const uvpVal = document.getElementById("uvpVal");
-  sliderUvp.addEventListener("input", (e) => {
-    uvpVal.textContent = `${parseFloat(e.target.value).toFixed(2)} V`;
-  });
+  sliderUvp?.addEventListener("input", (e) => { uvpVal.textContent = `${parseFloat(e.target.value).toFixed(2)} V`; });
 
   const sliderThermal = document.getElementById("sliderThermal");
   const thermalVal = document.getElementById("thermalVal");
-  sliderThermal.addEventListener("input", (e) => {
-    thermalVal.textContent = `${e.target.value} °C`;
-  });
+  sliderThermal?.addEventListener("input", (e) => { thermalVal.textContent = `${e.target.value} °C`; });
 
-  document.getElementById("btnSyncBms").addEventListener("click", () => {
+  document.getElementById("btnSyncBms")?.addEventListener("click", () => {
     const ovp = parseFloat(sliderOvp.value);
     const uvp = parseFloat(sliderUvp.value);
     const thermal = parseInt(sliderThermal.value);
     window.bleManager.syncBMSLimits(ovp, uvp, thermal);
-    appendLog(`BMS Thresholds Synced: OVP=${ovp}V, UVP=${uvp}V, Therm=${thermal}°C`, "success");
+    appendLog(`BMS Write Request Sent (0xFFF2)`, "success");
   });
 
-  function simulateBikeData() {
-    blePulse.className = "pulse-indicator connected";
-    deviceName.textContent = "M1365262501142 (Connected)";
-    let speed = 28;
-    setInterval(() => {
-      speed = Math.max(0, Math.min(45, speed + (Math.random() * 4 - 2)));
-      document.getElementById("speedDisplay").textContent = Math.round(speed);
-      document.getElementById("tripDist").textContent = (14.2 + (speed * 0.001)).toFixed(1) + " km";
-    }, 1200);
-  }
-
-  document.getElementById("btnClearLog").addEventListener("click", () => {
+  document.getElementById("btnClearLog")?.addEventListener("click", () => {
     terminalLogs.innerHTML = "";
   });
-
 });
