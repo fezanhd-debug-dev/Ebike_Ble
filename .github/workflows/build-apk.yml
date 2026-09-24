@@ -39,10 +39,13 @@ jobs:
             exit 1
           fi
 
+      - name: Remove stale android folder (if committed)
+        run: rm -rf android
+
       - name: Install Dependencies & Sync Capacitor
         run: |
           npm install
-          npx cap add android || true
+          npx cap add android
           npx cap sync android
 
       - name: Grant execute permission for gradlew
