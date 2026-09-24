@@ -14,6 +14,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -27,13 +32,29 @@ jobs:
           cmdline-tools-version: '12266719'
           accept-android-sdk-licenses: true
 
-      - name: Accept Android SDK Licenses (Force)
+      - name: Verify www folder exists
         run: |
-          mkdir -p $ANDROID_HOME/licenses
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          if [ ! -d "www" ]; then
+            echo "ERROR: www/ folder not found. Move index.html, css/, js/ into www/"
+            exit 1
+          fi
+
+      - name: Install Dependencies & Sync Capacitor
+        run: |
+          npm install
+          npx cap add android || true
+          npx cap sync android
 
       - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+        run: chmod +x android/gradlew
 
       - name: Build with Gradle
-        run: ./gradlew assembleDebug
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EBike-Smart-App-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
